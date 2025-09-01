@@ -75,7 +75,7 @@ public class BidderApp extends JFrame {
     }
     
     private void initializeGUI() {
-        setTitle("🚀 StudyBay Intelligent Bidder Bot v2.0 - Ultra-Fast Mode");
+        setTitle("🚀 StudyBay ULTRA-FAST Bidder Bot v2.1 - INSTANT MODE");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(700, 600);
         setLocationRelativeTo(null);
@@ -219,7 +219,7 @@ public class BidderApp extends JFrame {
         
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
         bidTextField = createStyledTextField(
-            "🎆 INTELLIGENT MODE: Context-aware messages with AI optimization", 20
+            "💫 INSTANT MODE: Ultra-fast millisecond bidding with fallback strategies", 20
         );
         bidTextField.setEditable(false);
         bidTextField.setBackground(new Color(46, 204, 113, 30));

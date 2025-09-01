@@ -59,12 +59,12 @@ public class BidderBot {
     private Set<String> processedOrders = new HashSet<>();
     private int pollingDots = 0;
     
-    // AGGRESSIVE BIDDING STRATEGY CONFIGURATION
+    // ULTRA-AGGRESSIVE BIDDING STRATEGY CONFIGURATION
     private int scanList = 1;
     private int fullScanInterval = 10;
     private int fullScanDepthLimit = 3;
     private int currentCycle = 0;
-    private int refreshRate = 3; // seconds - FASTER for competitive bidding
+    private int refreshRate = 0; // INSTANT - NO DELAYS for competitive bidding
     // Removed: accumulatedOrders - now processing directly from search page
     
     // Simplified filter exploitation - no filter changes, just apply button triggering
@@ -340,26 +340,29 @@ public class BidderBot {
                 // Check if we're still on the right page
                 currentUrl = page.url();
                 if (!currentUrl.contains("/order/search") && !currentUrl.contains("/orders")) {
-                    System.out.println("Redirected away from search page to: " + currentUrl);
-                    // Navigate back to search page
-                    page.navigate(ORDERS_URL, new Page.NavigateOptions().setWaitUntil(WaitUntilState.NETWORKIDLE));
-                    Thread.sleep(3000);
+                    // Navigate back to search page instantly
+                    page.navigate(ORDERS_URL);
+                    Thread.sleep(1000); // Quick wait for page load
                     continue;
                 }
                 
-                // CORE EXPLOITATION: Trigger predefined filters via AJAX (NO PAGE RELOADS)
+                // ULTRA-FAST: Trigger filters and collect orders instantly
                 triggerAJAXFilterApplication();
                 
-                // DOM expansion and accumulation
+                // Quick DOM expansion
                 expandDOMThroughScrolling();
                 
-                // Human-like timing with randomization (FASTER for competition)
-                int delay = refreshRate + ThreadLocalRandom.current().nextInt(1, 4); // Reduced delay
-                Thread.sleep(delay * 1000);
+                // EXPERIMENTAL: Try parallel bid placement every 10 cycles
+                if (currentCycle % 10 == 0) {
+                    tryParallelBidPlacement();
+                }
+                
+                // ULTRA-FAST timing - minimal delays for instant capture
+                Thread.sleep(100); // Only 100ms delay between cycles
                 
             } catch (Exception e) {
                 System.out.println("Error in monitoring loop: " + e.getMessage());
-                Thread.sleep(5000);
+                Thread.sleep(500); // Quick recovery
             }
         }
     }
@@ -417,46 +420,28 @@ public class BidderBot {
     
     private void triggerAJAXFilterApplication() {
         try {
-            // Check current URL before filter application
-            String beforeUrl = page.url();
-            System.out.println("Before filter application, URL: " + beforeUrl);
-            
-            // CORE EXPLOITATION: Click predefined filter apply button to trigger AJAX
+            // ULTRA-FAST: Click filter button INSTANTLY - no delays
             if (page.locator(FILTER_APPLY_SELECTOR).count() > 0) {
-                System.out.println("Applying AJAX filter...");
                 page.locator(FILTER_APPLY_SELECTOR).first().click();
-                Thread.sleep(ThreadLocalRandom.current().nextInt(1500, 3000));
+                Thread.sleep(50); // Only 50ms wait for AJAX
                 
-                // Wait for AJAX response and DOM update (NO PAGE RELOAD)
-                page.waitForLoadState(LoadState.NETWORKIDLE);
-                
-                // Check URL after filter application
-                String afterUrl = page.url();
-                System.out.println("After filter application, URL: " + afterUrl);
-                
-                if (!afterUrl.equals(beforeUrl)) {
-                    System.out.println("WARNING: URL changed during AJAX filter application!");
-                }
-                
-                // Immediately collect orders after AJAX response
+                // Immediately collect orders after minimal wait
                 collectOrdersFromCurrentDOM();
             } else {
-                System.out.println("No filter apply button found");
+                // If no filter button, directly collect orders
+                collectOrdersFromCurrentDOM();
             }
         } catch (Exception e) {
-            System.out.println("Error in AJAX filter application: " + e.getMessage());
+            // Continue regardless of filter errors
+            collectOrdersFromCurrentDOM();
         }
     }
     
     private void expandDOMThroughScrolling() {
         try {
-            // Scroll manipulation to trigger more content loading
-            page.evaluate("window.scroll(0, -250);"); // Scroll up
-            Thread.sleep(500);
-            page.evaluate("window.scroll(0, document.body.scrollHeight);"); // Scroll down
-            Thread.sleep(500);
-            page.evaluate("window.scroll(0, 0);"); // Back to top
-            Thread.sleep(1000);
+            // ULTRA-FAST scrolling - minimal delays
+            page.evaluate("window.scroll(0, document.body.scrollHeight);"); // Quick scroll
+            Thread.sleep(50); // Only 50ms
         } catch (Exception e) {
             // Silent scroll errors
         }
@@ -464,86 +449,165 @@ public class BidderBot {
     
     private void collectOrdersFromCurrentDOM() {
         try {
-            // Harvest ALL orders from current DOM state (post-AJAX update)
+            // ULTRA-FAST: Harvest ALL orders instantly
             Locator orderContainers = page.locator(".orderA-converted__order");
             int orderCount = orderContainers.count();
             
-            // Only notify if orders found (reduce noise)
             if (orderCount > 0) {
                 foundOrders += orderCount;
                 app.updateFoundOrders(foundOrders);
-            }
-            
-            for (int i = 0; i < orderCount; i++) {
-                try {
-                    Locator container = orderContainers.nth(i);
-                    
-                    // Extract order URL for tracking (but don't navigate)
-                    Locator linkElement = container.locator(".orderA-converted__name");
-                    if (linkElement.count() > 0) {
-                        String href = linkElement.getAttribute("href");
-                        if (href != null && !href.isEmpty()) {
-                            String fullUrl = BASE_URL + href;
-                            
-                            // Check if we've already processed this order
-                            if (!processedOrders.contains(fullUrl)) {
-                                // Process order directly from search page container
-                                processOrderFromSearchPage(container, fullUrl);
-                                processedOrders.add(fullUrl);
+                
+                // Process ALL containers immediately - no delays
+                for (int i = 0; i < orderCount; i++) {
+                    try {
+                        Locator container = orderContainers.nth(i);
+                        
+                        // Extract order URL for tracking instantly
+                        Locator linkElement = container.locator(".orderA-converted__name");
+                        if (linkElement.count() > 0) {
+                            String href = linkElement.getAttribute("href");
+                            if (href != null && !href.isEmpty()) {
+                                String fullUrl = BASE_URL + href;
                                 
-                                // Small delay between orders for human-like behavior
-                                Thread.sleep(ThreadLocalRandom.current().nextInt(500, 1200));
+                                // Check if we've already processed this order
+                                // REMOVED: Duplicate order prevention - bid on ALL orders every time
+                                // if (!processedOrders.contains(fullUrl)) {
+                                    // INSTANT processing - no delays between orders
+                                    processOrderFromSearchPageInstant(container, fullUrl);
+                                    // REMOVED: processedOrders.add(fullUrl); - allow re-bidding
+                                    // NO DELAY - process next order immediately
+                                // }
                             }
                         }
+                    } catch (Exception e) {
+                        // Continue to next order if this one fails
+                        continue;
                     }
-                } catch (Exception e) {
-                    // Silent individual order processing errors
                 }
             }
         } catch (Exception e) {
-            // Silent DOM collection errors
+            // Silent DOM collection errors - continue operation
         }
     }
     
-    private void processOrderFromSearchPage(Locator orderContainer, String orderUrl) {
+    private void processOrderFromSearchPageInstant(Locator orderContainer, String orderUrl) {
         try {
-            // FAST: Extract order details directly from search page container
-            OrderDetails orderDetails = extractOrderDetailsFromContainer(orderContainer, orderUrl);
+            // ULTRA-FAST: Extract only essential data instantly
+            String title = "Unknown Order";
+            int bidCount = 0;
             
-            // Quick intelligence check - skip obviously bad orders
-            if (!shouldProcessOrder(orderDetails)) {
-                return; // Skip silently
+            try {
+                Locator titleElement = orderContainer.locator(".orderA-converted__name");
+                if (titleElement.count() > 0) {
+                    title = titleElement.textContent().trim();
+                }
+                
+                Locator bidCountElement = orderContainer.locator(".orderA-converted__bidsCounter");
+                if (bidCountElement.count() > 0) {
+                    String bidText = bidCountElement.textContent().trim();
+                    bidCount = extractNumberFromText(bidText);
+                }
+            } catch (Exception e) {
+                // Continue with defaults if extraction fails
             }
             
+            // NO FILTERING - bid on ALL orders for maximum capture rate
+            // All orders that appear should be processed regardless of competition or title
+            
             // Notify that an order was found
-            app.notifyOrderFound(orderDetails.title != null ? orderDetails.title : "New Order");
+            app.notifyOrderFound(title);
             
-            // Generate intelligent message BEFORE clicking (preparation)
-            String intelligentMessage = generateIntelligentBidMessage(orderDetails);
+            // Generate FAST message - use simple template
+            String fastMessage = generateFastBidMessage(title);
             
-            // SPEED CRITICAL: Find and click "Place a Bid" button in this container
+            // CRITICAL: Find bid button IMMEDIATELY with fallback strategies
             Locator bidButton = orderContainer.locator(BID_BUTTON_SELECTOR);
             if (bidButton.count() > 0) {
-                // Click to open bid form (modal on same page)
+                // INSTANT click - no delays
                 bidButton.first().click();
-                Thread.sleep(ThreadLocalRandom.current().nextInt(300, 700)); // Minimal delay
                 
-                // RAPID: Fill and submit bid form
-                if (submitBidFormFast(intelligentMessage)) {
+                // IMMEDIATE form submission with timeout protection
+                if (submitBidFormUltraFast(fastMessage)) {
                     successfulBids++;
                     app.updateSuccessfulBids(successfulBids);
-                    
-                    // Notify successful bid with sound
-                    app.notifyBidSuccess(orderDetails.title != null ? orderDetails.title : "Order");
+                    app.notifyBidSuccess(title);
                 } else {
-                    // Silent failure - no need to notify user of failed attempts
+                    // FALLBACK: Try global bid buttons if container disappeared
+                    tryGlobalBidPlacement(fastMessage, title);
                 }
+            } else {
+                // FALLBACK: Try global bid buttons immediately
+                tryGlobalBidPlacement(fastMessage, title);
             }
             
         } catch (Exception e) {
-            // Silent error handling
+            // Silent error handling - container might have disappeared
         }
     }
+    
+    private void tryGlobalBidPlacement(String bidMessage, String title) {
+        try {
+            // FALLBACK: Look for any available bid buttons on the page
+            String[] globalBidSelectors = {
+                "button:has-text('Place a Bid')",
+                "button:has-text('Make a Bid')",
+                "button.styled__MakeBidButton",
+                "button[data-testid*='MakeBid']",
+                "button[class*='bid']"
+            };
+            
+            for (String selector : globalBidSelectors) {
+                try {
+                    Locator globalBidButtons = page.locator(selector);
+                    if (globalBidButtons.count() > 0) {
+                        // Try the first available bid button
+                        globalBidButtons.first().click();
+                        Thread.sleep(50); // Minimal delay
+                        
+                        if (submitBidFormUltraFast(bidMessage)) {
+                            successfulBids++;
+                            app.updateSuccessfulBids(successfulBids);
+                            app.notifyBidSuccess(title);
+                            return; // Success - exit
+                        }
+                    }
+                } catch (Exception e) {
+                    // Try next selector
+                    continue;
+                }
+            }
+        } catch (Exception e) {
+            // Silent fallback failure
+        }
+    }
+    
+    private void tryParallelBidPlacement() {
+        try {
+            // EXPERIMENTAL: Try to place multiple bids simultaneously
+            Locator allBidButtons = page.locator(BID_BUTTON_SELECTOR);
+            int buttonCount = allBidButtons.count();
+            
+            if (buttonCount > 0) {
+                // Click multiple bid buttons rapidly
+                for (int i = 0; i < Math.min(buttonCount, 3); i++) { // Limit to 3 simultaneous attempts
+                    try {
+                        allBidButtons.nth(i).click();
+                        Thread.sleep(10); // Ultra-minimal delay between clicks
+                    } catch (Exception e) {
+                        continue;
+                    }
+                }
+                
+                // Try to fill any open forms
+                String fastMessage = "Hi! Ready to deliver excellent results immediately!";
+                submitBidFormUltraFast(fastMessage);
+            }
+        } catch (Exception e) {
+            // Silent parallel processing errors
+        }
+    }
+    
+
     
     private OrderDetails extractOrderDetailsFromContainer(Locator container, String orderUrl) {
         OrderDetails details = new OrderDetails(orderUrl);
@@ -603,57 +667,82 @@ public class BidderBot {
     }
     
     private boolean shouldProcessOrder(OrderDetails order) {
-        // FAST filtering - skip obviously bad orders
-        if (order.bidCount > 25) return false; // Too much competition
-        if (order.title == null || order.title.length() < 5) return false; // Invalid title
-        return true; // Process most orders for speed, detailed filtering later
+        // NO FILTERING - process ALL orders for maximum capture rate
+        return true; // Bid on every order that appears, regardless of competition or title
     }
     
     private String getSkipReason(OrderDetails order) {
-        if (order.bidCount > 25) return "high competition: " + order.bidCount + " bids";
-        if (order.title == null || order.title.length() < 5) return "invalid title";
-        return "unknown";
+        // NO FILTERING APPLIED - all orders are processed
+        return "no filtering applied";
     }
     
-    private boolean submitBidFormFast(String bidMessage) {
+    private String generateFastBidMessage(String title) {
+        // ULTRA-FAST message generation - no complex analysis
+        String[] fastTemplates = {
+            "Hi! I can deliver excellent results for this project. Ready to start immediately!",
+            "Hello! I have the expertise needed for this task. Let's discuss your requirements!",
+            "Greetings! I'm available to complete this project with high quality. Contact me now!"
+        };
+        
+        return fastTemplates[ThreadLocalRandom.current().nextInt(fastTemplates.length)];
+    }
+    
+    private boolean submitBidFormUltraFast(String bidMessage) {
         try {
-            // SPEED CRITICAL: Handle bid form modal with minimal delays
-            
-            // Wait for bid form to appear (should be instant modal)
+            // ULTRA-FAST: Wait minimal time for modal - NEVER TIMEOUT
             Locator bidForm = page.locator(".ui-modal-content, .sb-makeOffer-converted__bid");
-            bidForm.first().waitFor(new Locator.WaitForOptions().setTimeout(3000));
+            try {
+                bidForm.first().waitFor(new Locator.WaitForOptions().setTimeout(500)); // Only 500ms
+            } catch (Exception e) {
+                // Continue even if modal doesn't appear - maybe it's already there
+            }
             
-            // Fill text area rapidly
+            // Fill text area INSTANTLY
             Locator textArea = page.locator(".auctionTextarea-converted__textarea");
             if (textArea.count() > 0) {
                 textArea.first().fill(bidMessage);
-                Thread.sleep(ThreadLocalRandom.current().nextInt(200, 500)); // Minimal delay
+                Thread.sleep(50); // Only 50ms delay
                 
-                // Find and click submit button (wait for it to be enabled)
-                Locator submitButton = page.locator("button:has-text('Place a Bid'):not([disabled])");
+                // Find submit button with multiple selector strategies - AGGRESSIVE RETRY
+                String[] submitSelectors = {
+                    "button:has-text('Place a Bid'):not([disabled])",
+                    "button:has-text('Submit'):not([disabled])",
+                    "button:has-text('Send Bid'):not([disabled])",
+                    "button[type='submit']:not([disabled])",
+                    "button:has-text('Place a Bid')", // Try even if disabled
+                    "button:has-text('Submit')", // Try even if disabled
+                    "button[type='submit']" // Try even if disabled
+                };
                 
-                // Wait briefly for button to become enabled after text entry
+                // AGGRESSIVE: Try each selector multiple times
+                for (String selector : submitSelectors) {
+                    for (int attempt = 0; attempt < 3; attempt++) { // 3 attempts per selector
+                        try {
+                            Locator submitButton = page.locator(selector);
+                            if (submitButton.count() > 0) {
+                                submitButton.first().click();
+                                Thread.sleep(50); // Minimal verification wait
+                                
+                                // Quick success check
+                                boolean modalGone = page.locator(".ui-modal-content").count() == 0;
+                                if (modalGone) {
+                                    return true; // SUCCESS!
+                                }
+                            }
+                        } catch (Exception e) {
+                            // Continue to next attempt
+                            continue;
+                        }
+                    }
+                }
+                
+                // If no submit button worked, try to close modal
                 try {
-                    submitButton.first().waitFor(new Locator.WaitForOptions().setTimeout(2000));
-                    submitButton.first().click();
-                    
-                    // Brief wait to verify submission
-                    Thread.sleep(ThreadLocalRandom.current().nextInt(300, 800));
-                    
-                    // Check if modal disappeared (success indicator)
-                    boolean modalGone = page.locator(".ui-modal-content").count() == 0;
-                    
-                    return modalGone;
-                    
-                } catch (Exception e) {
-                    // Button didn't become enabled, might need price input
-                    // For now, click cancel to close modal
-                    Locator cancelButton = page.locator("button:has-text('Cancel')");
+                    Locator cancelButton = page.locator("button:has-text('Cancel'), .ui-modal-close");
                     if (cancelButton.count() > 0) {
                         cancelButton.first().click();
                     }
-                    return false;
-                }
+                } catch (Exception ignored) {}
             }
             
             return false;
