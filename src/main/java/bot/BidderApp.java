@@ -39,6 +39,23 @@ public class BidderApp extends JFrame {
     public BidderApp() {
         setupLookAndFeel();
         initializeGUI();
+        
+        // Test: Start a simple animation demo on startup
+        javax.swing.Timer testTimer = new javax.swing.Timer(3000, e -> {
+            if (!isRunning) {
+                // Show fishing animation demo
+                updateStatus("🎣 Demo: Fishing for orders...", false);
+                
+                // Start test animation after 2 seconds
+                javax.swing.Timer demoAnimation = new javax.swing.Timer(2000, evt -> {
+                    startTestAnimation();
+                });
+                demoAnimation.setRepeats(false);
+                demoAnimation.start();
+            }
+        });
+        testTimer.setRepeats(false);
+        testTimer.start();
     }
     
     private void setupLookAndFeel() {
@@ -473,8 +490,17 @@ public class BidderApp extends JFrame {
         startButton.setEnabled(false);
         stopButton.setEnabled(true);
         
-        // Start animation
-        startAnimation();
+        // Update status and start animation immediately
+        updateStatus("🚀 Ultra-Fast Intelligent Bot Starting...", false);
+        
+        // Start fishing animation after a brief delay
+        javax.swing.Timer startAnimationTimer = new javax.swing.Timer(2000, e -> {
+            if (isRunning) {
+                startAnimation();
+            }
+        });
+        startAnimationTimer.setRepeats(false);
+        startAnimationTimer.start();
         
         bot = new BidderBot(username, password, bidText, this);
         
@@ -491,8 +517,6 @@ public class BidderApp extends JFrame {
         });
         botThread.setDaemon(true);
         botThread.start();
-        
-        updateStatus("🚀 Ultra-Fast Intelligent Bot Starting...", false);
     }
     
     private void stopBot() {
@@ -517,13 +541,47 @@ public class BidderApp extends JFrame {
             animationTimer.stop();
         }
         
+        // Reset animation frame
+        animationFrame = 0;
+        
         animationTimer = new javax.swing.Timer(800, e -> {
             animationFrame = (animationFrame + 1) % fishingAnimation.length;
             if (isRunning) {
-                statusLabel.setText(fishingAnimation[animationFrame]);
+                SwingUtilities.invokeLater(() -> {
+                    statusLabel.setText(fishingAnimation[animationFrame]);
+                    statusLabel.repaint(); // Force repaint
+                });
             }
         });
         animationTimer.start();
+        System.out.println("Animation timer started with " + fishingAnimation.length + " frames");
+    }
+    
+    private void startTestAnimation() {
+        if (animationTimer != null) {
+            animationTimer.stop();
+        }
+        
+        animationFrame = 0;
+        
+        animationTimer = new javax.swing.Timer(800, e -> {
+            animationFrame = (animationFrame + 1) % fishingAnimation.length;
+            SwingUtilities.invokeLater(() -> {
+                statusLabel.setText(fishingAnimation[animationFrame]);
+                statusLabel.repaint();
+                System.out.println("Animation frame: " + fishingAnimation[animationFrame]); // Debug
+            });
+        });
+        
+        // Set first frame immediately
+        SwingUtilities.invokeLater(() -> {
+            statusLabel.setText(fishingAnimation[0]);
+            statusLabel.repaint();
+            System.out.println("Starting test animation with: " + fishingAnimation[0]);
+        });
+        
+        animationTimer.start();
+        System.out.println("Test animation started!");
     }
     
     private void stopAnimation() {
@@ -590,9 +648,19 @@ public class BidderApp extends JFrame {
         // Only show important messages
         if (message.contains("Error") || message.contains("failed")) {
             updateStatus("❌ " + message, true);
-        } else if (message.contains("started") || message.contains("ACTIVATED")) {
-            updateStatus("🚀 Bot Started - Searching for orders...", false);
-            startAnimation();
+        } else if (message.contains("started") || message.contains("ACTIVATED") || message.contains("Initializing")) {
+            // Start the fishing animation immediately when bot starts
+            SwingUtilities.invokeLater(() -> {
+                updateStatus("🚀 Bot Started - Searching for orders...", false);
+                // Give a short delay then start the fishing animation
+                javax.swing.Timer delayTimer = new javax.swing.Timer(1500, e -> {
+                    if (isRunning) {
+                        startAnimation();
+                    }
+                });
+                delayTimer.setRepeats(false);
+                delayTimer.start();
+            });
         }
         // Ignore other verbose logging messages
     }
@@ -611,7 +679,27 @@ public class BidderApp extends JFrame {
     
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
-            new BidderApp().setVisible(true);
+            BidderApp app = new BidderApp();
+            app.setVisible(true);
+            
+            // Add a test feature: double-click status panel to test animation
+            app.statusLabel.addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override
+                public void mouseClicked(java.awt.event.MouseEvent e) {
+                    if (e.getClickCount() == 2) {
+                        // Test animation on double-click
+                        if (!app.isRunning) {
+                            app.isRunning = true;
+                            app.startAnimation();
+                            app.updateStatus("🎣 Testing animation - Double-click again to stop", false);
+                        } else {
+                            app.isRunning = false;
+                            app.stopAnimation();
+                            app.updateStatus("🛠️ Bot Ready - Click Start to begin", false);
+                        }
+                    }
+                }
+            });
         });
     }
 }

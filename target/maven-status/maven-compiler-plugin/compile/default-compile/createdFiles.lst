@@ -1,6 +1,7 @@
 bot/BidderBot.class
 bot/BidderBot$OrderDetails.class
 bot/BidderApp$1.class
+bot/BidderApp$9.class
 bot/BidderApp$3.class
 bot/BidderApp$7.class
 bot/BidderApp.class

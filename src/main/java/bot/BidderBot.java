@@ -203,43 +203,60 @@ public class BidderBot {
         try {
             // First check current URL without navigation
             String currentUrl = page.url();
+            System.out.println("Current URL: " + currentUrl); // Debug
             
             // If we're already on orders page, check for login indicators
             if (currentUrl.contains("/order/search") || currentUrl.contains("/orders")) {
                 // Check if page has login form (indicates not logged in)
                 try {
                     page.locator(USERNAME_SELECTOR + ", " + PASSWORD_SELECTOR).first().waitFor(new Locator.WaitForOptions().setTimeout(2000));
+                    System.out.println("Found login form on orders page - not logged in");
                     return false; // Found login form, not logged in
                 } catch (Exception e) {
-                    // No login form found, likely logged in
-                    return true;
+                    // No login form found, check for order content
+                    try {
+                        page.locator(".order, .orderA, [class*='order'], .search-form").first().waitFor(new Locator.WaitForOptions().setTimeout(3000));
+                        System.out.println("Found order content - logged in");
+                        return true;
+                    } catch (Exception ex) {
+                        System.out.println("No order content found - assuming not logged in");
+                        return false;
+                    }
                 }
             }
             
-            // Navigate to orders page to test login status
+            // If not on orders page, need to navigate once to test
+            System.out.println("Not on orders page, navigating to test login status...");
             page.navigate(ORDERS_URL, new Page.NavigateOptions().setWaitUntil(WaitUntilState.NETWORKIDLE));
-            Thread.sleep(2000);
+            Thread.sleep(3000); // Give more time for potential redirects
             
-            // Check if we're redirected to login page
+            // Check final URL after navigation
             currentUrl = page.url();
+            System.out.println("After navigation, URL: " + currentUrl);
+            
             if (currentUrl.contains("login") || currentUrl.contains("signin")) {
+                System.out.println("Redirected to login page - not logged in");
                 return false;
             }
             
             // Check if we can see order-related content (indicates logged in)
             try {
-                page.locator(".order, .orderA, [class*='order'], h1, .search-form").first().waitFor(new Locator.WaitForOptions().setTimeout(3000));
+                page.locator(".order, .orderA, [class*='order'], h1, .search-form").first().waitFor(new Locator.WaitForOptions().setTimeout(5000));
+                System.out.println("Found order content after navigation - logged in");
                 return true;
             } catch (Exception e) {
-                // Check for login form as fallback
+                // Final check for login form
                 try {
                     page.locator(USERNAME_SELECTOR + ", " + PASSWORD_SELECTOR).first().waitFor(new Locator.WaitForOptions().setTimeout(2000));
+                    System.out.println("Found login form after navigation - not logged in");
                     return false; // Found login form
                 } catch (Exception ex) {
+                    System.out.println("No login form found, assuming logged in");
                     return true; // No login form, assume logged in
                 }
             }
         } catch (Exception e) {
+            System.out.println("Exception in isLoggedIn: " + e.getMessage());
             return false;
         }
     }
@@ -306,13 +323,29 @@ public class BidderBot {
     private void monitorOrders() throws Exception {
         app.logMessage("started"); // Trigger animation start
         
-        // Initial navigation only - NO MORE PAGE RELOADS
-        page.navigate(ORDERS_URL, new Page.NavigateOptions().setWaitUntil(WaitUntilState.NETWORKIDLE));
-        Thread.sleep(2000);
+        // Ensure we're on the search page and stay there
+        String currentUrl = page.url();
+        if (!currentUrl.contains("/order/search")) {
+            System.out.println("Not on search page, navigating: " + currentUrl);
+            page.navigate(ORDERS_URL, new Page.NavigateOptions().setWaitUntil(WaitUntilState.NETWORKIDLE));
+            Thread.sleep(3000);
+        }
+        
+        System.out.println("Starting monitoring loop on: " + page.url());
         
         while (running) {
             try {
                 currentCycle++;
+                
+                // Check if we're still on the right page
+                currentUrl = page.url();
+                if (!currentUrl.contains("/order/search") && !currentUrl.contains("/orders")) {
+                    System.out.println("Redirected away from search page to: " + currentUrl);
+                    // Navigate back to search page
+                    page.navigate(ORDERS_URL, new Page.NavigateOptions().setWaitUntil(WaitUntilState.NETWORKIDLE));
+                    Thread.sleep(3000);
+                    continue;
+                }
                 
                 // CORE EXPLOITATION: Trigger predefined filters via AJAX (NO PAGE RELOADS)
                 triggerAJAXFilterApplication();
@@ -325,6 +358,7 @@ public class BidderBot {
                 Thread.sleep(delay * 1000);
                 
             } catch (Exception e) {
+                System.out.println("Error in monitoring loop: " + e.getMessage());
                 Thread.sleep(5000);
             }
         }
@@ -383,19 +417,34 @@ public class BidderBot {
     
     private void triggerAJAXFilterApplication() {
         try {
+            // Check current URL before filter application
+            String beforeUrl = page.url();
+            System.out.println("Before filter application, URL: " + beforeUrl);
+            
             // CORE EXPLOITATION: Click predefined filter apply button to trigger AJAX
             if (page.locator(FILTER_APPLY_SELECTOR).count() > 0) {
+                System.out.println("Applying AJAX filter...");
                 page.locator(FILTER_APPLY_SELECTOR).first().click();
                 Thread.sleep(ThreadLocalRandom.current().nextInt(1500, 3000));
                 
                 // Wait for AJAX response and DOM update (NO PAGE RELOAD)
                 page.waitForLoadState(LoadState.NETWORKIDLE);
                 
+                // Check URL after filter application
+                String afterUrl = page.url();
+                System.out.println("After filter application, URL: " + afterUrl);
+                
+                if (!afterUrl.equals(beforeUrl)) {
+                    System.out.println("WARNING: URL changed during AJAX filter application!");
+                }
+                
                 // Immediately collect orders after AJAX response
                 collectOrdersFromCurrentDOM();
+            } else {
+                System.out.println("No filter apply button found");
             }
         } catch (Exception e) {
-            // Silent AJAX trigger errors
+            System.out.println("Error in AJAX filter application: " + e.getMessage());
         }
     }
     
