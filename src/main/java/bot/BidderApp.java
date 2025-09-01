@@ -24,7 +24,7 @@ public class BidderApp extends JFrame {
     }
     
     private void initializeGUI() {
-        setTitle("StudyBay Bidder Bot");
+        setTitle("StudyBay Intelligent Bidder Bot v2.0");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(600, 500);
         setLocationRelativeTo(null);
@@ -74,10 +74,12 @@ public class BidderApp extends JFrame {
         
         // Bid Text
         gbc.gridx = 0; gbc.gridy = 2; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-        panel.add(new JLabel("Bid Text:"), gbc);
+        panel.add(new JLabel("Base Bid Template:"), gbc);
         
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-        bidTextField = new JTextField("Hi. Why don't you hire me, relax and I will get it done for you within no time?", 20);
+        bidTextField = new JTextField("INTELLIGENT MODE: Bot will generate context-aware messages automatically", 20);
+        bidTextField.setEditable(false);
+        bidTextField.setBackground(new Color(240, 248, 255));
         panel.add(bidTextField, gbc);
         
         return panel;
@@ -147,11 +149,11 @@ public class BidderApp extends JFrame {
     private void startBot() {
         String username = usernameField.getText().trim();
         String password = new String(passwordField.getPassword());
-        String bidText = bidTextField.getText().trim();
+        String bidText = "INTELLIGENT_MODE"; // Signal to use intelligent bidding
         
-        if (username.isEmpty() || password.isEmpty() || bidText.isEmpty()) {
+        if (username.isEmpty() || password.isEmpty()) {
             JOptionPane.showMessageDialog(this, 
-                "Please fill in all fields before starting the bot.", 
+                "Please fill in username and password before starting the bot.", 
                 "Missing Information", 
                 JOptionPane.WARNING_MESSAGE);
             return;
@@ -177,7 +179,12 @@ public class BidderApp extends JFrame {
         botThread.setDaemon(true);
         botThread.start();
         
-        logMessage("Bot started successfully!");
+        logMessage("Intelligent Bot started with advanced features:");
+        logMessage("✓ Context-aware bid messages");
+        logMessage("✓ Subject-specific templates");
+        logMessage("✓ Competition analysis");
+        logMessage("✓ Urgency detection");
+        logMessage("✓ Customer behavior adaptation");
     }
     
     private void stopBot() {

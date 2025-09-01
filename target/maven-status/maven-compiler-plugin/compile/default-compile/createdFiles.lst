@@ -1,4 +1,5 @@
 bot/BidderApp$2.class
 bot/BidderBot.class
+bot/BidderBot$OrderDetails.class
 bot/BidderApp$1.class
 bot/BidderApp.class
