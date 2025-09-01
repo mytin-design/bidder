@@ -304,26 +304,21 @@ public class BidderBot {
     }
     
     private void monitorOrders() throws Exception {
-        app.logMessage("ULTRA-FAST INTELLIGENT BIDDING INITIATED - Search Page Direct Processing");
+        app.logMessage("started"); // Trigger animation start
         
         // Initial navigation only - NO MORE PAGE RELOADS
         page.navigate(ORDERS_URL, new Page.NavigateOptions().setWaitUntil(WaitUntilState.NETWORKIDLE));
         Thread.sleep(2000);
-        app.logMessage("Search page loaded - SPEED MODE: Processing orders directly from containers");
         
         while (running) {
             try {
                 currentCycle++;
-                showPollingMessage();
                 
                 // CORE EXPLOITATION: Trigger predefined filters via AJAX (NO PAGE RELOADS)
                 triggerAJAXFilterApplication();
                 
                 // DOM expansion and accumulation
                 expandDOMThroughScrolling();
-                
-                // Harvest all accumulated orders from DOM
-                // REMOVED: harvestAccumulatedOrders() - now processing directly
                 
                 // Human-like timing with randomization (FASTER for competition)
                 int delay = refreshRate + ThreadLocalRandom.current().nextInt(1, 4); // Reduced delay
@@ -334,16 +329,6 @@ public class BidderBot {
             }
         }
     }
-    
-    private void showPollingMessage() {
-        pollingDots = (pollingDots + 1) % 4; // Cycle through 0, 1, 2, 3
-        String dots = ".".repeat(pollingDots);
-        String message = "SPEED SCAN" + dots + " ".repeat(3 - pollingDots); // Fast scanning indicator
-        app.logMessage(message);
-    }
-    
-
-
     
     private boolean containsUrgencyKeywords(String text) {
         if (text == null) return false;
@@ -405,7 +390,6 @@ public class BidderBot {
                 
                 // Wait for AJAX response and DOM update (NO PAGE RELOAD)
                 page.waitForLoadState(LoadState.NETWORKIDLE);
-                app.logMessage("AJAX filter applied - DOM refreshed with new orders");
                 
                 // Immediately collect orders after AJAX response
                 collectOrdersFromCurrentDOM();
@@ -435,7 +419,11 @@ public class BidderBot {
             Locator orderContainers = page.locator(".orderA-converted__order");
             int orderCount = orderContainers.count();
             
-            app.logMessage("Found " + orderCount + " order containers on search page");
+            // Only notify if orders found (reduce noise)
+            if (orderCount > 0) {
+                foundOrders += orderCount;
+                app.updateFoundOrders(foundOrders);
+            }
             
             for (int i = 0; i < orderCount; i++) {
                 try {
@@ -475,9 +463,11 @@ public class BidderBot {
             
             // Quick intelligence check - skip obviously bad orders
             if (!shouldProcessOrder(orderDetails)) {
-                app.logMessage("Skipped order: " + orderDetails.title + " (" + getSkipReason(orderDetails) + ")");
-                return;
+                return; // Skip silently
             }
+            
+            // Notify that an order was found
+            app.notifyOrderFound(orderDetails.title != null ? orderDetails.title : "New Order");
             
             // Generate intelligent message BEFORE clicking (preparation)
             String intelligentMessage = generateIntelligentBidMessage(orderDetails);
@@ -485,10 +475,6 @@ public class BidderBot {
             // SPEED CRITICAL: Find and click "Place a Bid" button in this container
             Locator bidButton = orderContainer.locator(BID_BUTTON_SELECTOR);
             if (bidButton.count() > 0) {
-                // Log the intelligent analysis
-                app.logMessage("FAST BID: " + orderDetails.title + " (" + orderDetails.bidCount + " bids, " + 
-                    (orderDetails.customerOnline ? "online" : "offline") + ")");
-                
                 // Click to open bid form (modal on same page)
                 bidButton.first().click();
                 Thread.sleep(ThreadLocalRandom.current().nextInt(300, 700)); // Minimal delay
@@ -497,18 +483,16 @@ public class BidderBot {
                 if (submitBidFormFast(intelligentMessage)) {
                     successfulBids++;
                     app.updateSuccessfulBids(successfulBids);
-                    foundOrders++;
-                    app.updateFoundOrders(foundOrders);
-                    app.logMessage("✓ FAST BID PLACED: " + orderDetails.title);
+                    
+                    // Notify successful bid with sound
+                    app.notifyBidSuccess(orderDetails.title != null ? orderDetails.title : "Order");
                 } else {
-                    app.logMessage("✗ Fast bid failed: " + orderDetails.title);
+                    // Silent failure - no need to notify user of failed attempts
                 }
-            } else {
-                app.logMessage("No bid button found in container for: " + orderDetails.title);
             }
             
         } catch (Exception e) {
-            app.logMessage("Error in fast order processing: " + e.getMessage());
+            // Silent error handling
         }
     }
     
