@@ -18,6 +18,7 @@ public class BidderApp extends JFrame {
     private JButton startButton;
     private JButton stopButton;
     private JTextArea logArea;
+    private JCheckBox bidPlacementCheckBox;
     
     private BidderBot bot;
     private boolean isRunning = false;
@@ -75,7 +76,7 @@ public class BidderApp extends JFrame {
     }
     
     private void initializeGUI() {
-        setTitle("🚀 StudyBay ULTRA-FAST Bidder Bot v2.1 - INSTANT MODE");
+        setTitle("🔍 Order Detection Bot - DETECTION ONLY MODE");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(700, 600);
         setLocationRelativeTo(null);
@@ -219,16 +220,55 @@ public class BidderApp extends JFrame {
         
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
         bidTextField = createStyledTextField(
-            "💫 INSTANT MODE: Ultra-fast millisecond bidding with fallback strategies", 20
+            "🔍 DETECTION ONLY: Order scanning without bidding functionality", 20
         );
         bidTextField.setEditable(false);
-        bidTextField.setBackground(new Color(46, 204, 113, 30));
-        bidTextField.setForeground(new Color(39, 174, 96));
+        bidTextField.setBackground(new Color(52, 152, 219, 30));
+        bidTextField.setForeground(new Color(41, 128, 185));
         bidTextField.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 11));
         bidTextField.setToolTipText("AI will generate personalized bid messages automatically");
         panel.add(bidTextField, gbc);
         
+        // Bid Placement Control
+        gbc.gridx = 0; gbc.gridy = 3; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
+        JLabel bidPlacementLabel = new JLabel("🎯 Bid Placement:");
+        bidPlacementLabel.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+        bidPlacementLabel.setForeground(new Color(52, 73, 94));
+        panel.add(bidPlacementLabel, gbc);
+        
+        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
+        bidPlacementCheckBox = new JCheckBox("✅ Enable Bid Placement (Detection + Bidding)");
+        bidPlacementCheckBox.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 11));
+        bidPlacementCheckBox.setForeground(new Color(41, 128, 185));
+        bidPlacementCheckBox.setOpaque(false);
+        bidPlacementCheckBox.setSelected(false); // Default to detection only
+        bidPlacementCheckBox.setToolTipText("Toggle between detection-only and full bidding functionality");
+        bidPlacementCheckBox.addActionListener(e -> {
+            boolean enabled = bidPlacementCheckBox.isSelected();
+            updateBidPlacementMode(enabled);
+            if (bot != null) {
+                bot.setBidPlacementEnabled(enabled);
+            }
+        });
+        panel.add(bidPlacementCheckBox, gbc);
+        
         return panel;
+    }
+    
+    private void updateBidPlacementMode(boolean enabled) {
+        if (enabled) {
+            setTitle("🎯 StudyBay Bidding Bot - DETECTION + BIDDING MODE");
+            bidTextField.setText("🎯 BIDDING ENABLED: Order detection with automatic bid placement");
+            bidTextField.setBackground(new Color(46, 204, 113, 30));
+            bidTextField.setForeground(new Color(39, 174, 96));
+            startButton.setText("🚀 Start Bidding Bot");
+        } else {
+            setTitle("🔍 Order Detection Bot - DETECTION ONLY MODE");
+            bidTextField.setText("🔍 DETECTION ONLY: Order scanning without bidding functionality");
+            bidTextField.setBackground(new Color(52, 152, 219, 30));
+            bidTextField.setForeground(new Color(41, 128, 185));
+            startButton.setText("🔍 Start Detection Bot");
+        }
     }
     
     private JPanel createStatusPanel() {
@@ -327,10 +367,10 @@ public class BidderApp extends JFrame {
         
         // Found Orders Section
         gbc.gridx = 0; gbc.gridy = 0; gbc.anchor = GridBagConstraints.CENTER;
-        JPanel foundOrdersPanel = createStatCard("🔍 Found Orders", "0", new Color(52, 152, 219));
+        JPanel foundOrdersPanel = createStatCard("🔍 Orders Found", "0", new Color(52, 152, 219));
         panel.add(foundOrdersPanel, gbc);
         
-        // Successful Bids Section
+        // Successful Bids Section (will show bid placement status)
         gbc.gridx = 1; gbc.gridy = 0;
         JPanel successfulBidsPanel = createStatCard("✅ Successful Bids", "0", new Color(46, 204, 113));
         panel.add(successfulBidsPanel, gbc);
@@ -379,7 +419,7 @@ public class BidderApp extends JFrame {
         valueLabel.setHorizontalAlignment(SwingConstants.CENTER);
         
         // Store references for later updates
-        if (title.contains("Found Orders")) {
+        if (title.contains("Orders Found")) {
             foundOrdersLabel = valueLabel;
         } else if (title.contains("Successful Bids")) {
             successfulBidsLabel = valueLabel;
@@ -396,7 +436,7 @@ public class BidderApp extends JFrame {
         panel.setOpaque(false);
         
         // Modern Start Button
-        startButton = createModernButton("🚀 Start Ultra-Fast Bot", new Color(46, 204, 113), Color.WHITE);
+        startButton = createModernButton("🔍 Start Detection Bot", new Color(46, 204, 113), Color.WHITE);
         startButton.setPreferredSize(new Dimension(200, 45));
         startButton.addActionListener(new ActionListener() {
             @Override
@@ -476,7 +516,8 @@ public class BidderApp extends JFrame {
     private void startBot() {
         String username = usernameField.getText().trim();
         String password = new String(passwordField.getPassword());
-        String bidText = "INTELLIGENT_MODE"; // Signal to use intelligent bidding
+        // Determine mode based on checkbox
+        String bidText = bidPlacementCheckBox.isSelected() ? "BIDDING_ENABLED" : "DETECTION_ONLY";
         
         if (username.isEmpty() || password.isEmpty()) {
             JOptionPane.showMessageDialog(this, 
@@ -490,8 +531,10 @@ public class BidderApp extends JFrame {
         startButton.setEnabled(false);
         stopButton.setEnabled(true);
         
-        // Update status and start animation immediately
-        updateStatus("🚀 Ultra-Fast Intelligent Bot Starting...", false);
+        // Update status based on mode
+        String statusMessage = bidPlacementCheckBox.isSelected() ? 
+            "🎯 Bidding Bot Starting..." : "🔍 Detection Bot Starting...";
+        updateStatus(statusMessage, false);
         
         // Start fishing animation after a brief delay
         javax.swing.Timer startAnimationTimer = new javax.swing.Timer(2000, e -> {
@@ -644,7 +687,7 @@ public class BidderApp extends JFrame {
     }
     
     public void logMessage(String message) {
-        // Show ALL debugging messages in the GUI for bid placement troubleshooting
+        // Show ALL debugging messages in the GUI for order detection monitoring
         SwingUtilities.invokeLater(() -> {
             // Format timestamp
             String timestamp = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"));
