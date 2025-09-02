@@ -449,44 +449,102 @@ public class BidderBot {
     
     private void collectOrdersFromCurrentDOM() {
         try {
-            // ULTRA-FAST: Harvest ALL orders instantly
-            Locator orderContainers = page.locator(".orderA-converted__order");
-            int orderCount = orderContainers.count();
+            app.logMessage("🔍 COMPREHENSIVE ORDER DETECTION STARTING...");
             
-            if (orderCount > 0) {
-                foundOrders += orderCount;
+            // STEP 1: Test multiple container selectors to find ALL orders
+            String[] allPossibleSelectors = {
+                ".orderA-converted__order",                    // Primary selector
+                ".orderA-converted__contentWrapper",           // Alternative 1
+                ".order-item",                                // Alternative 2  
+                "[class*='order'][class*='container']",       // Generic order containers
+                "[class*='order'][class*='wrapper']",         // Generic order wrappers
+                ".order",                                     // Simple order class
+                "[data-testid*='order']",                    // TestID based
+                "[class*='Order']",                          // Capital O Order
+                "div[class*='order']",                       // Div with order class
+                "article[class*='order']",                   // Article elements
+                "section[class*='order']",                   // Section elements
+                "[id*='order']",                             // ID based selectors
+                "tr[class*='order']",                        // Table row orders
+                "li[class*='order']",                        // List item orders
+                "[class*='bid'][class*='item']",             // Bid items
+                "[class*='auction']",                        // Auction items
+                "[class*='project']",                        // Project items
+                "[class*='task']",                           // Task items
+                "[class*='job']",                            // Job items
+                "[role='listitem']",                         // ARIA list items
+                "[role='article']",                          // ARIA articles
+            };
+            
+            int totalFoundOrders = 0;
+            Locator bestSelector = null;
+            String bestSelectorName = "";
+            
+            // Test each selector and find the one with most results
+            for (String selector : allPossibleSelectors) {
+                try {
+                    Locator containers = page.locator(selector);
+                    int count = containers.count();
+                    app.logMessage("🔍 Selector '" + selector + "' found " + count + " elements");
+                    
+                    if (count > totalFoundOrders) {
+                        totalFoundOrders = count;
+                        bestSelector = containers;
+                        bestSelectorName = selector;
+                        app.logMessage("⬆️ NEW BEST SELECTOR: '" + selector + "' with " + count + " orders");
+                    }
+                } catch (Exception e) {
+                    app.logMessage("⚠️ Error testing selector '" + selector + "': " + e.getMessage());
+                }
+            }
+            
+            app.logMessage("🏆 BEST SELECTOR: '" + bestSelectorName + "' found " + totalFoundOrders + " orders");
+            
+            // STEP 2: Check for pagination/load more content
+            checkForMoreContent();
+            
+            // STEP 3: Verify we're seeing all available orders
+            verifyCompleteOrderVisibility();
+            
+            // STEP 4: Process orders with the best selector
+            if (totalFoundOrders > 0 && bestSelector != null) {
+                foundOrders += totalFoundOrders;
                 app.updateFoundOrders(foundOrders);
                 
+                app.logMessage("⚡ PROCESSING " + totalFoundOrders + " ORDERS using best selector...");
+                
                 // Process ALL containers immediately - no delays
-                for (int i = 0; i < orderCount; i++) {
+                for (int i = 0; i < totalFoundOrders; i++) {
                     try {
-                        Locator container = orderContainers.nth(i);
+                        Locator container = bestSelector.nth(i);
                         
                         // Extract order URL for tracking instantly
-                        Locator linkElement = container.locator(".orderA-converted__name");
-                        if (linkElement.count() > 0) {
-                            String href = linkElement.getAttribute("href");
-                            if (href != null && !href.isEmpty()) {
-                                String fullUrl = BASE_URL + href;
-                                
-                                // Check if we've already processed this order
-                                // REMOVED: Duplicate order prevention - bid on ALL orders every time
-                                // if (!processedOrders.contains(fullUrl)) {
-                                    // INSTANT processing - no delays between orders
-                                    processOrderFromSearchPageInstant(container, fullUrl);
-                                    // REMOVED: processedOrders.add(fullUrl); - allow re-bidding
-                                    // NO DELAY - process next order immediately
-                                // }
-                            }
+                        String fullUrl = extractOrderUrl(container);
+                        
+                        if (!fullUrl.isEmpty()) {
+                            app.logMessage("🔗 ORDER " + (i + 1) + "/" + totalFoundOrders + ": " + fullUrl);
+                            
+                            // INSTANT processing - no delays between orders
+                            processOrderFromSearchPageInstant(container, fullUrl);
+                        } else {
+                            app.logMessage("⚠️ ORDER " + (i + 1) + " has no valid URL, analyzing container...");
+                            analyzeContainerContent(container, i + 1);
                         }
                     } catch (Exception e) {
-                        // Continue to next order if this one fails
+                        app.logMessage("⚠️ ERROR processing order " + (i + 1) + ": " + e.getMessage());
                         continue;
                     }
                 }
+                
+                app.logMessage("✅ FINISHED PROCESSING " + totalFoundOrders + " ORDERS");
+            } else {
+                app.logMessage("❌ NO ORDERS FOUND WITH ANY SELECTOR!");
+                app.logMessage("🔍 PERFORMING DEEP PAGE ANALYSIS...");
+                performDeepPageAnalysis();
             }
         } catch (Exception e) {
-            // Silent DOM collection errors - continue operation
+            app.logMessage("💥 ERROR in collectOrdersFromCurrentDOM: " + e.getMessage());
+            e.printStackTrace();
         }
     }
     
@@ -516,68 +574,136 @@ public class BidderBot {
             
             // Notify that an order was found
             app.notifyOrderFound(title);
+            app.logMessage("📝 PROCESSING ORDER: " + title + " (" + bidCount + " bids)");
             
             // Generate FAST message - use simple template
             String fastMessage = generateFastBidMessage(title);
             
-            // CRITICAL: Find bid button IMMEDIATELY with fallback strategies
-            Locator bidButton = orderContainer.locator(BID_BUTTON_SELECTOR);
-            if (bidButton.count() > 0) {
-                // INSTANT click - no delays
-                bidButton.first().click();
-                
-                // IMMEDIATE form submission with timeout protection
-                if (submitBidFormUltraFast(fastMessage)) {
-                    successfulBids++;
-                    app.updateSuccessfulBids(successfulBids);
-                    app.notifyBidSuccess(title);
-                } else {
-                    // FALLBACK: Try global bid buttons if container disappeared
-                    tryGlobalBidPlacement(fastMessage, title);
+            // CRITICAL DEBUG: Check for bid buttons with extensive logging
+            app.logMessage("🔍 SEARCHING FOR BID BUTTON...");
+            
+            // Try multiple bid button selector strategies
+            String[] bidButtonSelectors = {
+                "button.styled__MakeBidButton-sc-18augvm-9",
+                "button[data-testid*='MakeBid']", 
+                "button:has-text('Place a Bid')",
+                "button:has-text('Make a Bid')",
+                "button:has-text('Bid')",
+                "button[class*='MakeBid']",
+                "button[class*='bid']",
+                ".styled__MakeBidButton",
+                "[data-cy='make-bid-button']",
+                "button[type='button']:has-text('Bid')"
+            };
+            
+            boolean bidButtonFound = false;
+            String usedSelector = "";
+            
+            for (String selector : bidButtonSelectors) {
+                try {
+                    Locator bidButton = orderContainer.locator(selector);
+                    int buttonCount = bidButton.count();
+                    app.logMessage("🔍 Selector '" + selector + "' found " + buttonCount + " buttons");
+                    
+                    if (buttonCount > 0) {
+                        app.logMessage("✅ FOUND BID BUTTON with selector: " + selector);
+                        usedSelector = selector;
+                        
+                        // INSTANT click - no delays
+                        app.logMessage("🖱️ CLICKING BID BUTTON...");
+                        bidButton.first().click();
+                        Thread.sleep(100); // Small delay to let modal appear
+                        
+                        app.logMessage("⚡ BID BUTTON CLICKED! Attempting form submission...");
+                        
+                        // IMMEDIATE form submission with timeout protection
+                        if (submitBidFormUltraFast(fastMessage)) {
+                            successfulBids++;
+                            app.updateSuccessfulBids(successfulBids);
+                            app.notifyBidSuccess(title);
+                            app.logMessage("🎉 BID SUCCESSFULLY PLACED for: " + title);
+                            return; // Success!
+                        } else {
+                            app.logMessage("❌ BID FORM SUBMISSION FAILED for: " + title);
+                            // Continue to try other selectors
+                        }
+                        bidButtonFound = true;
+                        break; // Exit loop after first successful click
+                    }
+                } catch (Exception e) {
+                    app.logMessage("⚠️ Error with selector '" + selector + "': " + e.getMessage());
+                    continue;
                 }
-            } else {
-                // FALLBACK: Try global bid buttons immediately
-                tryGlobalBidPlacement(fastMessage, title);
+            }
+            
+            if (!bidButtonFound) {
+                app.logMessage("❌ NO BID BUTTON FOUND! Trying global fallback...");
+                // FALLBACK: Try global bid buttons if container disappeared
+                if (!tryGlobalBidPlacement(fastMessage, title)) {
+                    // ULTIMATE FALLBACK: Try individual page navigation strategy
+                    tryIndividualPageBidPlacement(orderUrl, fastMessage, title);
+                }
             }
             
         } catch (Exception e) {
-            // Silent error handling - container might have disappeared
+            app.logMessage("💥 ERROR in processOrderFromSearchPageInstant: " + e.getMessage());
+            e.printStackTrace();
         }
     }
     
-    private void tryGlobalBidPlacement(String bidMessage, String title) {
+    private boolean tryGlobalBidPlacement(String bidMessage, String title) {
         try {
+            app.logMessage("🌍 TRYING GLOBAL BID PLACEMENT for: " + title);
+            
             // FALLBACK: Look for any available bid buttons on the page
             String[] globalBidSelectors = {
                 "button:has-text('Place a Bid')",
                 "button:has-text('Make a Bid')",
                 "button.styled__MakeBidButton",
                 "button[data-testid*='MakeBid']",
-                "button[class*='bid']"
+                "button[class*='bid']",
+                "button:has-text('Bid')",
+                "[data-cy='make-bid-button']"
             };
             
             for (String selector : globalBidSelectors) {
                 try {
                     Locator globalBidButtons = page.locator(selector);
-                    if (globalBidButtons.count() > 0) {
+                    int buttonCount = globalBidButtons.count();
+                    app.logMessage("🌍 Global selector '" + selector + "' found " + buttonCount + " buttons");
+                    
+                    if (buttonCount > 0) {
+                        app.logMessage("✅ FOUND GLOBAL BID BUTTON with selector: " + selector);
+                        
                         // Try the first available bid button
+                        app.logMessage("🖱️ CLICKING GLOBAL BID BUTTON...");
                         globalBidButtons.first().click();
-                        Thread.sleep(50); // Minimal delay
+                        Thread.sleep(100); // Minimal delay
+                        
+                        app.logMessage("⚡ GLOBAL BID BUTTON CLICKED! Attempting form submission...");
                         
                         if (submitBidFormUltraFast(bidMessage)) {
                             successfulBids++;
                             app.updateSuccessfulBids(successfulBids);
                             app.notifyBidSuccess(title);
-                            return; // Success - exit
+                            app.logMessage("🎉 GLOBAL BID SUCCESSFULLY PLACED for: " + title);
+                            return true; // Success - exit
+                        } else {
+                            app.logMessage("❌ GLOBAL BID FORM SUBMISSION FAILED for: " + title);
                         }
                     }
                 } catch (Exception e) {
-                    // Try next selector
+                    app.logMessage("⚠️ Error with global selector '" + selector + "': " + e.getMessage());
                     continue;
                 }
             }
+            
+            app.logMessage("❌ NO GLOBAL BID BUTTONS FOUND for: " + title);
+            return false;
+            
         } catch (Exception e) {
-            // Silent fallback failure
+            app.logMessage("💥 ERROR in tryGlobalBidPlacement: " + e.getMessage());
+            return false;
         }
     }
     
@@ -607,7 +733,418 @@ public class BidderBot {
         }
     }
     
-
+    private void tryIndividualPageBidPlacement(String orderUrl, String bidMessage, String title) {
+        Page orderPage = null;
+        try {
+            app.logMessage("🎆 ULTIMATE FALLBACK: Individual page navigation for: " + title);
+            app.logMessage("🔗 Navigating to: " + orderUrl);
+            
+            // Create new page for individual order
+            orderPage = context.newPage();
+            orderPage.setDefaultTimeout(5000); // 5 second timeout for fallback
+            orderPage.setDefaultNavigationTimeout(10000); // 10 second navigation timeout
+            
+            // Navigate to individual order page
+            orderPage.navigate(orderUrl, new Page.NavigateOptions().setWaitUntil(WaitUntilState.NETWORKIDLE));
+            app.logMessage("✅ NAVIGATED to individual order page");
+            
+            // Wait briefly for page to stabilize
+            Thread.sleep(500);
+            
+            // Look for bid button on individual page with multiple selectors
+            String[] individualPageBidSelectors = {
+                "button:has-text('Place a Bid')",
+                "button:has-text('Make a Bid')", 
+                "button:has-text('Bid')",
+                "button[class*='bid']",
+                "button[data-testid*='bid']",
+                ".bid-button",
+                "[data-cy*='bid']",
+                "input[type='submit'][value*='bid']"
+            };
+            
+            boolean bidButtonClicked = false;
+            for (String selector : individualPageBidSelectors) {
+                try {
+                    Locator bidButton = orderPage.locator(selector);
+                    int buttonCount = bidButton.count();
+                    app.logMessage("🔍 Individual page selector '" + selector + "' found " + buttonCount + " buttons");
+                    
+                    if (buttonCount > 0) {
+                        // Check if button is visible
+                        if (bidButton.first().isVisible()) {
+                            app.logMessage("✅ FOUND VISIBLE BID BUTTON on individual page: " + selector);
+                            app.logMessage("🖱️ CLICKING INDIVIDUAL PAGE BID BUTTON...");
+                            
+                            bidButton.first().click();
+                            Thread.sleep(200); // Allow time for modal/form to appear
+                            bidButtonClicked = true;
+                            
+                            app.logMessage("⚡ INDIVIDUAL PAGE BID BUTTON CLICKED!");
+                            break;
+                        } else {
+                            app.logMessage("⚠️ Bid button found but not visible: " + selector);
+                        }
+                    }
+                } catch (Exception e) {
+                    app.logMessage("⚠️ Error with individual page selector '" + selector + "': " + e.getMessage());
+                    continue;
+                }
+            }
+            
+            if (!bidButtonClicked) {
+                app.logMessage("❌ NO BID BUTTON FOUND on individual page for: " + title);
+                return;
+            }
+            
+            // Try to fill message and submit on individual page
+            String[] messageSelectors = {
+                "textarea[name='message']",
+                "textarea[placeholder*='message']",
+                "textarea[placeholder*='bid']", 
+                "textarea[class*='message']",
+                "textarea[class*='bid']",
+                "textarea",
+                "input[type='text'][name*='message']",
+                "[contenteditable='true']"
+            };
+            
+            boolean messageEntered = false;
+            for (String msgSelector : messageSelectors) {
+                try {
+                    Locator messageField = orderPage.locator(msgSelector);
+                    if (messageField.count() > 0) {
+                        app.logMessage("✅ FOUND MESSAGE FIELD on individual page: " + msgSelector);
+                        
+                        // Wait for field to be visible and fill it
+                        messageField.first().waitFor(new Locator.WaitForOptions().setState(WaitForSelectorState.VISIBLE).setTimeout(3000));
+                        messageField.first().fill(bidMessage);
+                        
+                        app.logMessage("✍️ MESSAGE FILLED on individual page!");
+                        messageEntered = true;
+                        break;
+                    }
+                } catch (Exception e) {
+                    app.logMessage("⚠️ Error filling message with selector '" + msgSelector + "': " + e.getMessage());
+                    continue;
+                }
+            }
+            
+            if (!messageEntered) {
+                app.logMessage("❌ NO MESSAGE FIELD FOUND on individual page for: " + title);
+                return;
+            }
+            
+            // Try to submit on individual page
+            String[] submitSelectors = {
+                "button[type='submit']",
+                "button:has-text('Submit')",
+                "button:has-text('Place Bid')",
+                "button:has-text('Send')",
+                "input[type='submit']",
+                "button[class*='submit']",
+                "[data-cy*='submit']"
+            };
+            
+            boolean submitted = false;
+            for (String submitSelector : submitSelectors) {
+                try {
+                    Locator submitButton = orderPage.locator(submitSelector);
+                    if (submitButton.count() > 0) {
+                        app.logMessage("✅ FOUND SUBMIT BUTTON on individual page: " + submitSelector);
+                        
+                        // Wait for submit button to be visible and click it
+                        submitButton.first().waitFor(new Locator.WaitForOptions().setState(WaitForSelectorState.VISIBLE).setTimeout(3000));
+                        submitButton.first().click();
+                        
+                        app.logMessage("🖱️ SUBMIT CLICKED on individual page!");
+                        
+                        // Wait a moment to see if submission was successful
+                        Thread.sleep(1000);
+                        
+                        // Check for success indicators
+                        String currentUrl = orderPage.url();
+                        if (currentUrl.contains("success") || 
+                            orderPage.locator("text=success").count() > 0 ||
+                            orderPage.locator("text=submitted").count() > 0 ||
+                            orderPage.locator("text=thank you").count() > 0) {
+                            
+                            submitted = true;
+                            successfulBids++;
+                            app.updateSuccessfulBids(successfulBids);
+                            app.notifyBidSuccess(title);
+                            app.logMessage("🎉 INDIVIDUAL PAGE BID SUCCESSFULLY PLACED for: " + title);
+                            break;
+                        } else {
+                            app.logMessage("⚠️ Submit clicked but no success confirmation for: " + title);
+                        }
+                    }
+                } catch (Exception e) {
+                    app.logMessage("⚠️ Error with submit selector '" + submitSelector + "': " + e.getMessage());
+                    continue;
+                }
+            }
+            
+            if (!submitted) {
+                app.logMessage("❌ INDIVIDUAL PAGE BID SUBMISSION FAILED for: " + title);
+            }
+            
+        } catch (Exception e) {
+            app.logMessage("💥 ERROR in tryIndividualPageBidPlacement: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            // Always close the individual page
+            if (orderPage != null) {
+                try {
+                    orderPage.close();
+                    app.logMessage("🚪 CLOSED individual order page");
+                } catch (Exception ignored) {}
+            }
+        }
+    }
+    
+    private void checkForMoreContent() {
+        try {
+            app.logMessage("🔍 CHECKING FOR PAGINATION/LOAD MORE CONTENT...");
+            
+            // Check for pagination buttons
+            String[] paginationSelectors = {
+                "button:has-text('Load More')",
+                "button:has-text('Show More')",
+                "button:has-text('Next')",
+                ".pagination button",
+                "[class*='pagination']",
+                "[class*='load-more']",
+                "[class*='show-more']",
+                "button[class*='next']",
+                "a[class*='next']"
+            };
+            
+            for (String selector : paginationSelectors) {
+                int count = page.locator(selector).count();
+                if (count > 0) {
+                    app.logMessage("✅ FOUND PAGINATION: '" + selector + "' (" + count + " elements)");
+                    // Try clicking to load more content
+                    try {
+                        page.locator(selector).first().click();
+                        app.logMessage("🖱️ CLICKED PAGINATION BUTTON");
+                        Thread.sleep(1000); // Wait for content to load
+                        break;
+                    } catch (Exception e) {
+                        app.logMessage("⚠️ Failed to click pagination: " + e.getMessage());
+                    }
+                }
+            }
+            
+            // Try infinite scroll
+            app.logMessage("🔍 TRYING INFINITE SCROLL...");
+            for (int i = 0; i < 3; i++) {
+                page.evaluate("window.scrollTo(0, document.body.scrollHeight);");
+                Thread.sleep(500);
+                page.evaluate("window.scrollTo(0, 0);");
+                Thread.sleep(500);
+            }
+            
+        } catch (Exception e) {
+            app.logMessage("⚠️ Error checking for more content: " + e.getMessage());
+        }
+    }
+    
+    private String extractOrderUrl(Locator container) {
+        String[] linkSelectors = {
+            ".orderA-converted__name",
+            "a[href*='order']",
+            "a[href*='/order/']",
+            "a",
+            "[href]",
+            "[data-href]"
+        };
+        
+        for (String linkSelector : linkSelectors) {
+            try {
+                Locator linkElement = container.locator(linkSelector);
+                if (linkElement.count() > 0) {
+                    String href = linkElement.first().getAttribute("href");
+                    if (href != null && !href.isEmpty()) {
+                        return href.startsWith("http") ? href : BASE_URL + href;
+                    }
+                }
+            } catch (Exception e) {
+                continue;
+            }
+        }
+        
+        return "";
+    }
+    
+    private void analyzeContainerContent(Locator container, int containerNumber) {
+        try {
+            app.logMessage("🔍 ANALYZING CONTAINER " + containerNumber + " CONTENT...");
+            
+            // Get all text content
+            String containerText = container.textContent();
+            app.logMessage("📝 Container " + containerNumber + " text: " + 
+                          (containerText.length() > 100 ? containerText.substring(0, 100) + "..." : containerText));
+            
+            // Check for typical order indicators
+            String[] orderIndicators = {"deadline", "budget", "bid", "proposal", "due", "$", "€", "£", "pages", "words"};
+            for (String indicator : orderIndicators) {
+                if (containerText.toLowerCase().contains(indicator.toLowerCase())) {
+                    app.logMessage("✅ Container " + containerNumber + " contains order indicator: '" + indicator + "'");
+                }
+            }
+            
+            // Try to find clickable elements
+            int clickableCount = container.locator("a, button, [onclick], [href]").count();
+            app.logMessage("🖱️ Container " + containerNumber + " has " + clickableCount + " clickable elements");
+            
+        } catch (Exception e) {
+            app.logMessage("⚠️ Error analyzing container " + containerNumber + ": " + e.getMessage());
+        }
+    }
+    
+    private void verifyCompleteOrderVisibility() {
+        try {
+            app.logMessage("🔍 VERIFYING COMPLETE ORDER VISIBILITY...");
+            
+            // Check current URL and filters
+            String currentUrl = page.url();
+            app.logMessage("🔗 CURRENT URL: " + currentUrl);
+            
+            // Check for active filters that might be limiting results
+            String[] filterSelectors = {
+                "[class*='filter'][class*='active']",
+                "[class*='selected']",
+                "input[type='checkbox']:checked",
+                "select option:checked",
+                ".active",
+                "[aria-selected='true']"
+            };
+            
+            for (String filterSelector : filterSelectors) {
+                try {
+                    int filterCount = page.locator(filterSelector).count();
+                    if (filterCount > 0) {
+                        app.logMessage("🔍 ACTIVE FILTERS DETECTED: '" + filterSelector + "' (" + filterCount + " active)");
+                        // Log what filters are active
+                        for (int i = 0; i < Math.min(filterCount, 5); i++) {
+                            String filterText = page.locator(filterSelector).nth(i).textContent();
+                            app.logMessage("  • Filter " + (i + 1) + ": " + filterText);
+                        }
+                    }
+                } catch (Exception e) {
+                    // Continue checking other filters
+                }
+            }
+            
+            // Check if we need to clear filters to see all orders
+            tryToClearFilters();
+            
+        } catch (Exception e) {
+            app.logMessage("⚠️ Error verifying order visibility: " + e.getMessage());
+        }
+    }
+    
+    private void tryToClearFilters() {
+        try {
+            app.logMessage("🔍 ATTEMPTING TO CLEAR FILTERS FOR MAXIMUM VISIBILITY...");
+            
+            // Try to find and click "Clear All" or "Reset" buttons
+            String[] clearFilterSelectors = {
+                "button:has-text('Clear All')",
+                "button:has-text('Reset')",
+                "button:has-text('Clear Filters')",
+                "[class*='clear'][class*='filter']",
+                "[class*='reset']",
+                "button[type='reset']"
+            };
+            
+            for (String selector : clearFilterSelectors) {
+                try {
+                    if (page.locator(selector).count() > 0) {
+                        app.logMessage("✅ FOUND CLEAR FILTER BUTTON: " + selector);
+                        page.locator(selector).first().click();
+                        app.logMessage("🖱️ CLICKED CLEAR FILTERS");
+                        Thread.sleep(1000); // Wait for filters to clear
+                        return;
+                    }
+                } catch (Exception e) {
+                    continue;
+                }
+            }
+            
+            // Try to navigate to "all orders" view
+            String[] allOrdersSelectors = {
+                "a:has-text('All Orders')",
+                "button:has-text('All')",
+                "[href*='all']",
+                "[class*='all'][class*='order']"
+            };
+            
+            for (String selector : allOrdersSelectors) {
+                try {
+                    if (page.locator(selector).count() > 0) {
+                        app.logMessage("✅ FOUND ALL ORDERS LINK: " + selector);
+                        page.locator(selector).first().click();
+                        app.logMessage("🖱️ CLICKED ALL ORDERS");
+                        Thread.sleep(2000); // Wait for page to load
+                        return;
+                    }
+                } catch (Exception e) {
+                    continue;
+                }
+            }
+            
+        } catch (Exception e) {
+            app.logMessage("⚠️ Error clearing filters: " + e.getMessage());
+        }
+    }
+    
+    private void performDeepPageAnalysis() {
+        try {
+            app.logMessage("🔬 PERFORMING DEEP PAGE ANALYSIS...");
+            
+            // Get page title and URL
+            String pageTitle = page.title();
+            String pageUrl = page.url();
+            app.logMessage("📋 PAGE TITLE: " + pageTitle);
+            app.logMessage("🔗 PAGE URL: " + pageUrl);
+            
+            // Check if we're actually on the orders page
+            if (!pageUrl.contains("order") && !pageUrl.contains("search")) {
+                app.logMessage("⚠️ WARNING: May not be on orders page!");
+                app.logMessage("🔍 ATTEMPTING TO NAVIGATE TO ORDERS PAGE...");
+                page.navigate(ORDERS_URL);
+                Thread.sleep(3000);
+                return;
+            }
+            
+            // Count all elements on page
+            int totalElements = page.locator("*").count();
+            app.logMessage("📋 TOTAL PAGE ELEMENTS: " + totalElements);
+            
+            // Look for any text that might indicate orders
+            String pageContent = page.content();
+            String[] orderKeywords = {"order", "bid", "project", "task", "assignment", "deadline", "budget"};
+            
+            for (String keyword : orderKeywords) {
+                int occurrences = pageContent.toLowerCase().split(keyword.toLowerCase()).length - 1;
+                if (occurrences > 0) {
+                    app.logMessage("🔍 Keyword '" + keyword + "' appears " + occurrences + " times on page");
+                }
+            }
+            
+            // Try to find any potential order containers with very broad selectors
+            String[] broadSelectors = {"div", "article", "section", "li", "tr"};
+            for (String selector : broadSelectors) {
+                int count = page.locator(selector).count();
+                app.logMessage("📋 Found " + count + " '" + selector + "' elements");
+            }
+            
+        } catch (Exception e) {
+            app.logMessage("⚠️ Error in deep page analysis: " + e.getMessage());
+        }
+    }
     
     private OrderDetails extractOrderDetailsFromContainer(Locator container, String orderUrl) {
         OrderDetails details = new OrderDetails(orderUrl);
@@ -689,65 +1226,162 @@ public class BidderBot {
     
     private boolean submitBidFormUltraFast(String bidMessage) {
         try {
+            app.logMessage("📄 STARTING BID FORM SUBMISSION...");
+            
             // ULTRA-FAST: Wait minimal time for modal - NEVER TIMEOUT
             Locator bidForm = page.locator(".ui-modal-content, .sb-makeOffer-converted__bid");
             try {
+                app.logMessage("⌛ WAITING FOR MODAL TO APPEAR...");
                 bidForm.first().waitFor(new Locator.WaitForOptions().setTimeout(500)); // Only 500ms
+                app.logMessage("✅ MODAL APPEARED!");
             } catch (Exception e) {
+                app.logMessage("⚠️ MODAL TIMEOUT - continuing anyway (modal might already be there)");
                 // Continue even if modal doesn't appear - maybe it's already there
             }
             
-            // Fill text area INSTANTLY
-            Locator textArea = page.locator(".auctionTextarea-converted__textarea");
-            if (textArea.count() > 0) {
-                textArea.first().fill(bidMessage);
-                Thread.sleep(50); // Only 50ms delay
-                
-                // Find submit button with multiple selector strategies - AGGRESSIVE RETRY
-                String[] submitSelectors = {
-                    "button:has-text('Place a Bid'):not([disabled])",
-                    "button:has-text('Submit'):not([disabled])",
-                    "button:has-text('Send Bid'):not([disabled])",
-                    "button[type='submit']:not([disabled])",
-                    "button:has-text('Place a Bid')", // Try even if disabled
-                    "button:has-text('Submit')", // Try even if disabled
-                    "button[type='submit']" // Try even if disabled
-                };
-                
-                // AGGRESSIVE: Try each selector multiple times
-                for (String selector : submitSelectors) {
-                    for (int attempt = 0; attempt < 3; attempt++) { // 3 attempts per selector
-                        try {
-                            Locator submitButton = page.locator(selector);
-                            if (submitButton.count() > 0) {
-                                submitButton.first().click();
-                                Thread.sleep(50); // Minimal verification wait
-                                
-                                // Quick success check
-                                boolean modalGone = page.locator(".ui-modal-content").count() == 0;
-                                if (modalGone) {
-                                    return true; // SUCCESS!
-                                }
-                            }
-                        } catch (Exception e) {
-                            // Continue to next attempt
-                            continue;
-                        }
-                    }
+            // Check if ANY form of modal/form is present
+            String[] modalSelectors = {
+                ".ui-modal-content",
+                ".sb-makeOffer-converted__bid", 
+                ".modal",
+                "[role='dialog']",
+                ".popup",
+                ".overlay",
+                "form[class*='bid']",
+                "div[class*='bid'][class*='form']"
+            };
+            
+            boolean modalFound = false;
+            for (String modalSelector : modalSelectors) {
+                int modalCount = page.locator(modalSelector).count();
+                app.logMessage("🔍 Modal selector '" + modalSelector + "' found " + modalCount + " elements");
+                if (modalCount > 0) {
+                    modalFound = true;
+                    break;
                 }
-                
-                // If no submit button worked, try to close modal
-                try {
-                    Locator cancelButton = page.locator("button:has-text('Cancel'), .ui-modal-close");
-                    if (cancelButton.count() > 0) {
-                        cancelButton.first().click();
-                    }
-                } catch (Exception ignored) {}
             }
             
+            if (!modalFound) {
+                app.logMessage("❌ NO MODAL/FORM FOUND! Trying to proceed anyway...");
+            }
+            
+            // Fill text area INSTANTLY with multiple selector strategies
+            String[] textAreaSelectors = {
+                ".auctionTextarea-converted__textarea",
+                "textarea[name='message']",
+                "textarea[placeholder*='bid']",
+                "textarea[class*='bid']",
+                "textarea[class*='message']",
+                "textarea",
+                "input[type='text'][class*='bid']",
+                "[contenteditable='true']"
+            };
+            
+            boolean textAreaFilled = false;
+            for (String textAreaSelector : textAreaSelectors) {
+                try {
+                    Locator textArea = page.locator(textAreaSelector);
+                    int textAreaCount = textArea.count();
+                    app.logMessage("🔍 TextArea selector '" + textAreaSelector + "' found " + textAreaCount + " elements");
+                    
+                    if (textAreaCount > 0) {
+                        app.logMessage("✅ FOUND TEXT AREA with selector: " + textAreaSelector);
+                        app.logMessage("✍️ FILLING TEXT AREA with message: " + bidMessage.substring(0, Math.min(50, bidMessage.length())) + "...");
+                        
+                        textArea.first().fill(bidMessage);
+                        Thread.sleep(50); // Only 50ms delay
+                        
+                        app.logMessage("✅ TEXT AREA FILLED SUCCESSFULLY!");
+                        textAreaFilled = true;
+                        break;
+                    }
+                } catch (Exception e) {
+                    app.logMessage("⚠️ Error filling text area with selector '" + textAreaSelector + "': " + e.getMessage());
+                    continue;
+                }
+            }
+            
+            if (!textAreaFilled) {
+                app.logMessage("❌ NO TEXT AREA FOUND! Cannot fill bid message.");
+                return false;
+            }
+            
+            // Find submit button with multiple selector strategies - AGGRESSIVE RETRY
+            String[] submitSelectors = {
+                "button:has-text('Place a Bid'):not([disabled])",
+                "button:has-text('Submit'):not([disabled])",
+                "button:has-text('Send Bid'):not([disabled])",
+                "button[type='submit']:not([disabled])",
+                "button:has-text('Place a Bid')", // Try even if disabled
+                "button:has-text('Submit')", // Try even if disabled
+                "button[type='submit']", // Try even if disabled
+                "button:has-text('Send')",
+                "button[class*='submit']",
+                "input[type='submit']",
+                "button[value*='submit']"
+            };
+            
+            app.logMessage("🔍 SEARCHING FOR SUBMIT BUTTON...");
+            
+            // AGGRESSIVE: Try each selector multiple times
+            for (String selector : submitSelectors) {
+                for (int attempt = 0; attempt < 3; attempt++) { // 3 attempts per selector
+                    try {
+                        Locator submitButton = page.locator(selector);
+                        int submitCount = submitButton.count();
+                        app.logMessage("🔍 Submit selector '" + selector + "' (attempt " + (attempt + 1) + ") found " + submitCount + " buttons");
+                        
+                        if (submitCount > 0) {
+                            app.logMessage("✅ FOUND SUBMIT BUTTON with selector: " + selector);
+                            app.logMessage("🖱️ CLICKING SUBMIT BUTTON...");
+                            
+                            submitButton.first().click();
+                            Thread.sleep(50); // Minimal verification wait
+                            
+                            app.logMessage("⚡ SUBMIT BUTTON CLICKED! Checking for success...");
+                            
+                            // Quick success check
+                            boolean modalGone = page.locator(".ui-modal-content").count() == 0;
+                            if (modalGone) {
+                                app.logMessage("🎉 MODAL DISAPPEARED - BID SUBMISSION SUCCESS!");
+                                return true; // SUCCESS!
+                            } else {
+                                app.logMessage("⚠️ Modal still present, checking other indicators...");
+                                // Additional success checks
+                                Thread.sleep(100);
+                                if (page.locator(".ui-modal-content").count() == 0 || 
+                                    page.locator("text=success").count() > 0 ||
+                                    page.locator("text=submitted").count() > 0) {
+                                    app.logMessage("🎉 BID SUBMISSION SUCCESS (secondary check)!");
+                                    return true;
+                                }
+                            }
+                        }
+                    } catch (Exception e) {
+                        app.logMessage("⚠️ Error with submit selector '" + selector + "' (attempt " + (attempt + 1) + "): " + e.getMessage());
+                        continue;
+                    }
+                }
+            }
+            
+            app.logMessage("❌ NO SUBMIT BUTTON WORKED! Attempting modal closure...");
+            
+            // If no submit button worked, try to close modal
+            try {
+                Locator cancelButton = page.locator("button:has-text('Cancel'), .ui-modal-close");
+                if (cancelButton.count() > 0) {
+                    app.logMessage("🚪 CLOSING MODAL with cancel button...");
+                    cancelButton.first().click();
+                }
+            } catch (Exception ignored) {}
+            
+            app.logMessage("❌ BID FORM SUBMISSION FAILED!");
             return false;
             
         } catch (Exception e) {
+            app.logMessage("💥 EXCEPTION in submitBidFormUltraFast: " + e.getMessage());
+            e.printStackTrace();
+            
             // Try to close any open modal
             try {
                 Locator closeButton = page.locator(".ui-modal-close, button:has-text('Cancel')");

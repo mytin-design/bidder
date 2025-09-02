@@ -644,14 +644,37 @@ public class BidderApp extends JFrame {
     }
     
     public void logMessage(String message) {
-        // For compatibility with BidderBot, but we'll use simple status updates instead
-        // Only show important messages
-        if (message.contains("Error") || message.contains("failed")) {
-            updateStatus("❌ " + message, true);
-        } else if (message.contains("started") || message.contains("ACTIVATED") || message.contains("Initializing")) {
-            // Start the fishing animation immediately when bot starts
-            SwingUtilities.invokeLater(() -> {
-                updateStatus("🚀 Bot Started - Searching for orders...", false);
+        // Show ALL debugging messages in the GUI for bid placement troubleshooting
+        SwingUtilities.invokeLater(() -> {
+            // Format timestamp
+            String timestamp = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"));
+            String formattedMessage = "[" + timestamp + "] " + message;
+            
+            // Update the dedicated log area (activity log)
+            if (logArea != null) {
+                logArea.append(formattedMessage + "\n");
+                // Auto-scroll to bottom
+                logArea.setCaretPosition(logArea.getDocument().getLength());
+                
+                // Limit log area to last 100 lines to prevent memory issues
+                String[] lines = logArea.getText().split("\n");
+                if (lines.length > 100) {
+                    StringBuilder limitedLog = new StringBuilder();
+                    for (int i = lines.length - 100; i < lines.length; i++) {
+                        limitedLog.append(lines[i]).append("\n");
+                    }
+                    logArea.setText(limitedLog.toString());
+                    logArea.setCaretPosition(logArea.getDocument().getLength());
+                }
+            }
+            
+            // Also update status with the most recent message (shortened)
+            String shortMessage = message.length() > 80 ? message.substring(0, 80) + "..." : message;
+            updateStatus(shortMessage, false);
+            
+            // Special handling for critical messages
+            if (message.contains("started") || message.contains("ACTIVATED") || message.contains("Initializing")) {
+                // Start the fishing animation immediately when bot starts
                 // Give a short delay then start the fishing animation
                 javax.swing.Timer delayTimer = new javax.swing.Timer(1500, e -> {
                     if (isRunning) {
@@ -660,9 +683,11 @@ public class BidderApp extends JFrame {
                 });
                 delayTimer.setRepeats(false);
                 delayTimer.start();
-            });
-        }
-        // Ignore other verbose logging messages
+            }
+            
+            // Also print to console for terminal visibility
+            System.out.println(formattedMessage);
+        });
     }
     
     public void updateFoundOrders(int count) {
